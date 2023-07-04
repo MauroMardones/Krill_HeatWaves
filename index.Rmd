@@ -1,0 +1,1340 @@
+---
+title: "Correlation analysis Krill recriutment and environmental covariables"
+subtitle: "stock assessment krill populations "
+author: "Mardones, M; Watters, G.; Cárdenas, C."
+date:  "`r format(Sys.time(), '%d %B, %Y')`"
+bibliography: seaice.bib
+csl: apa.csl
+link-citations: yes
+linkcolor: blue
+output:
+  html_document:
+    keep_md: true
+    toc: true
+    toc_deep: 3
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+    theme: cosmo
+    fontsize: 0.9em
+    linestretch: 1.7
+    html-math-method: katex
+    self-contained: true
+    code-tools: true
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup1}
+rm(list = ls())
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fig.align = 'center',
+                      dev = 'jpeg',
+                      dpi = 300)
+#XQuartz is a mess, put this in your onload to default to cairo instead
+options(bitmapType = "cairo") 
+# (https://github.com/tidyverse/ggplot2/issues/2655)
+# Lo mapas se hacen mas rapido
+```
+
+# Background
+
+The following document intends to carry out a complementary
+methodological analysis to correlate environmental variables with the
+population dynamics of krill (*Euphausia superba*), in this case, with a
+biological component like lengths from fishery monitoring.
+
+# Hypothesis
+
+The primary inquiry pertains to the environmental effects of distinct
+physical and oceanographic factors in the Southern Ocean on the krill
+population. Our aim is to examine the population structure via krill
+length component and determine whether any changes were driven by
+environmental factors across any of its dimensions.
+
+# Objective
+
+Once the correlation and effects on the population and/or fishing
+indicators on krill have been verified, this analysis aims to have a
+time series of the environmental variable to incorporate into the stock
+assessment process. Similar work in @Wang2021 but with a longest fishery
+history.
+
+```{r}
+library(reshape2)
+library(tidyverse)
+library(plyr)
+library(lubridate)
+library(raster)
+library(sf)
+library(CCAMLRGIS)
+library(here)
+library(easystats)
+library(see) # for plotting
+library(ggraph) # needs to be loaded# analisis estadisticos post
+library(ggridges)
+library(ggpubr)
+library(knitr)
+library(kableExtra)
+# stat test
+library(corrplot)
+library(outliers)
+library(visreg)
+# correlation test 
+library(PerformanceAnalytics)
+library(psych)
+library(lme4)
+library(sjPlot)
+
+```
+
+# Methodology
+
+## Length structure krill 48 Statistical Subarea
+
+Another important piece of information for a stock evaluation refers to
+the biological components such as average sizes and weights across areas
+and years. To do this, we will explore the biological data and prepare
+the output to add it into stock assessment integrate model
+[@Methot2013].
+
+the idea is to correlate mean lengths with SIC.
+
+## Data exploratory analysis
+
+The object `ohbio2` come from data exploration analysis in data request
+CCAMLR data. This objetc have bio information from krill.
+
+```{r  echo=FALSE}
+#datos entregados por secretaria de CCMLAR
+metadata <- load("~/DOCAS/Data/565_C1_KRI_2021-10-01/DATA_PRODUCT_565.RData")
+# Data procesada por MMardones
+#ohbio <- load("DataLengthKrill.RData")
+#ohbio
+#metadata
+#son lo mismo
+```
+
+```{r}
+#cargo objeto
+meta <- get("METADATA")
+c1 <- get("C1")
+ohbio <- get("OBS_HAUL_BIOLOGY")
+names(ohbio)
+dim(c1)
+dim(ohbio)
+```
+
+
+Join data set with master as `c1` set. This join is trought
+`obs_haul_id` variable to get geoposition variables
+
+```{r warning=FALSE}
+ohbio2 <- left_join(c1, ohbio, by="obs_haul_id")
+dim(ohbio2)
+```
+
+Firsts glance. Test how many register have by year. In this case,
+`length_total_cm` by season ccamlr. Same exercise in date period
+`date_catchperiod_start` to separate dates.
+
+```{r}
+ohbio3 <- ohbio2 %>%
+  mutate(Year = year(date_catchperiod_start),
+         Month = month(date_catchperiod_start),
+         Day = day(date_catchperiod_start))
+```
+
+Save data further analysis
+```{r}
+length481 <-ohbio3 %>% 
+  dplyr::select(7, 9, 11, 12, 14, 24, 25, 29, 42, 44, 46, 47, 43) %>% 
+  filter(asd_code=="481")
+summary(length481)  
+save(length481, file = "length481.RData")
+```
+
+```{r}
+names(ohbio3)
+ohbio4 <- ohbio3 %>% 
+dplyr::select(7, 9, 11, 12, 14, 24, 25, 29, 42, 44, 46, 47)
+names(ohbio4)
+
+```
+
+```{r warning=FALSE, message=FALSE}
+coutlength <-ohbio4 %>% 
+  drop_na(length_total_cm) %>% 
+  dplyr::group_by(Year, Month, asd_code) %>%
+  dplyr::summarise(avg=mean(length_total_cm))
+#kableExtra::kable(coutlength, format = "html")
+```
+
+Mean length in time series by Subarea.
+
+```{r, fig.align="center"}
+pmea <- ggplot(coutlength %>% 
+                 filter(Year>2000), 
+               aes(Year,avg))+
+    geom_point(shape=21, fill=coutlength$asd_code, 
+               show.legend = T) +
+    stat_smooth(method= "glm", colour='#253494')+
+    scale_size(range = c(-4,8)) +
+    theme_bw()+ 
+    facet_wrap(.~asd_code)+
+    scale_x_continuous(breaks = seq(from = 2000, to = 2020, by = 2))+
+    #scale_y_discrete(breaks = seq(from = 1, to = 13, by = 1))+
+    theme(axis.text.x = element_text(angle = 90, hjust = 2))+
+    guides(fill = guide_legend(reverse=F))+
+    scale_fill_viridis_c(option="E")+
+    ylim(3,6)+
+    ylab("") +
+    xlab("") +
+    ggtitle("Lenght Mean Krill fishery")
+pmea
+```
+Some features of data set length structures
+
+```{r}
+table(ohbio4$gear_type) %>%
+  kbl() %>%
+  kable_styling()
+
+table(ohbio2$trawl_technique)%>%
+  kbl() %>%
+  kable_styling()
+```
+
+## Plots
+
+Filter data regarding to previous glances. Follow with a quick glimpse
+to all 48 subarea length composition from monitoring fisheries.
+
+```{r message=F, warning=F}
+jz <- ggplot(ohbio4 %>% 
+               dplyr::filter(Year>2000),
+             aes(x=length_total_cm, 
+                 y = as.factor(Year), 
+                 fill=asd_code))+
+  #geom_joy(alpha=0.9) +
+  geom_density_ridges(stat = "binline", bins = 50, 
+                      scale = 1.8, 
+                      draw_baseline = FALSE,
+                      alpha=0.9)+
+  facet_wrap(.~asd_code, ncol=3) +   
+  geom_vline(xintercept = 3.6, color = "red")+
+  scale_x_continuous(breaks = seq(from = 1, to = 10, 
+                                  by = 1))+
+  scale_y_discrete(breaks = seq(from = 2000, 
+                                to = 2020, by = 1))+
+  scale_fill_viridis_d(name="SubArea",
+                       option="F")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  xlim(0,10)+
+  xlab("Longitud (cm.)")+
+  ylab("")
+jz
+```
+
+Another way to watch this data is regarding thecnics trawl like Figure
+\@ref(fig:lenthtrwal).
+
+```{r lenthtrwal, message=F, warning=F, fig.cap="Krill length by Trawl technique"}
+
+trwal <- ggplot(ohbio4 %>% 
+               filter(Year>2000),
+             aes(x=length_total_cm, 
+                 y = as.factor(Year),
+                 fill= trawl_technique))+
+  #geom_joy(alpha=0.9) +
+  geom_density_ridges(stat = "binline", bins = 50, 
+                      scale = 1.8, 
+                      draw_baseline = FALSE,
+                      alpha=0.5)+
+  facet_wrap(.~asd_code, ncol=3) +   
+  geom_vline(xintercept = 3.6, color = "red")+
+  scale_x_continuous(breaks = seq(from = 1, to = 10, 
+                                  by = 1))+
+  scale_y_discrete(breaks = seq(from = 2000, 
+                                to = 2020, by = 1))+
+  scale_fill_viridis_d(name="Trawl Technique",
+                       option="F")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  xlim(0,10)+
+  xlab("Longitud (cm.)")+
+  ylab("")
+trwal
+```
+
+Same plot by Sub Area and month trought year. With this kind of plot, we
+can see the recruit power interannually (Figure\@ref(fig:lengthmonth).
+
+```{r lengthmonth, message=F, warning=F, fig.cap="Length by Month and  SubArea"}
+ymasd <- ggplot(ohbio4 %>% 
+               filter(Year>2000),
+             aes(x=length_total_cm, 
+                 y = as.factor(Month),
+                 fill=asd_code))+
+  #geom_joy(alpha=0.9) +
+  geom_density_ridges(stat = "binline", bins = 50, 
+                      scale = 1.5, 
+                      draw_baseline = FALSE,
+                      alpha=0.5)+
+  facet_wrap(.~season_ccamlr, ncol=5) +   
+  geom_vline(xintercept = 3.6, color = "red")+
+  scale_x_continuous(breaks = seq(from = 1, to = 10, 
+                                  by = 1))+
+  scale_y_discrete(breaks = seq(from = 1, 
+                                to = 12, by = 1))+
+  scale_fill_viridis_d(name="SubArea",
+                       option="F")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  xlim(0,10)+
+  xlab("Longitud (cm.)")+
+  ylab("")
+ymasd
+```
+
+Just 48.1 SubArea plot
+
+```{r  eval=FALSE, fig.align="center", message=F, warning=F}
+yma481 <- ggplot(ohbio4 %>% 
+               filter(Year>2000,
+                      asd_code==481),
+             aes(x=length_total_cm, 
+                 y = as.factor(Month),
+                 fill=asd_code))+
+  #geom_joy(alpha=0.9) +
+  geom_density_ridges(stat = "binline", bins = 50, 
+                      scale = 1.5, 
+                      draw_baseline = FALSE,
+                      alpha=0.5)+
+  facet_wrap(.~Year, ncol=5) +   
+  geom_vline(xintercept = 3.6, color = "red")+
+  scale_x_continuous(breaks = seq(from = 1, to = 10, 
+                                  by = 1))+
+  scale_y_discrete(breaks = seq(from = 1, 
+                                to = 12, by = 1))+
+  scale_fill_viridis_d(name="SubArea",
+                       option="F")+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  xlim(0,10)+
+  xlab("Longitud (cm.)")+
+  ylab("")
+yma481
+```
+
+
+Violin plot
+
+```{r}
+
+vio481 <- ggplot(ohbio4 %>% 
+               filter(Year>2000),
+             aes(x=as.factor(Year), 
+                 y = length_total_cm))+
+  geom_violin(alpha=0.5)+
+  geom_boxplot(width=0.1,
+               outlier.shape = NA)+
+  facet_wrap(~asd_code, ncol = 1)+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  xlab("")+
+  ylab("Length (cm.)")
+vio481
+
+```
+
+
+
+## Mean Length
+
+Recruit estimate (% Low Recruit length) [@Perry2020]
+
+Un diaggrama de caja para el porcentage de individuos bajo talla (3.6
+mmm.)
+
+```{r warning=FALSE}
+box <- ggplot(ohbio4) +
+  geom_boxplot(aes(length_total_cm, group=season_ccamlr), 
+               alpha=0.3,
+               fill=3)+
+  geom_vline(xintercept = 3.6, color = "red")+
+  xlim(0, 7)+
+  coord_flip()+
+  facet_wrap(~asd_code, ncol=1)+
+  theme_bw()+
+  labs(x="% Below Recruit length (3.6 mm.)",
+       x="")
+hi <- ggplot(ohbio4)+
+  geom_histogram(aes(y=length_total_cm), 
+                 fill=3,
+                 alpha=0.3,
+                 color="black")+
+  coord_flip()+
+  theme_bw()+
+  ylim(0,10)
+
+ggarrange(box, hi, ncol = 2)
+  
+```
+
+
+
+
+## Calculate Index Recruit
+
+```{r}
+inderec <- ohbio4 %>% 
+  drop_na(length_total_cm) %>% 
+  dplyr::group_by(Year) %>% 
+  dplyr::mutate(prolen = length_total_cm - 4.16) %>% 
+  dplyr::mutate(prolen2 = prolen*1) %>% 
+  dplyr::summarize(prolen3 =mean(prolen2))
+# calcuo el error sd
+
+limite_superior <- mean(inderec$prolen3) + 
+  1.96 * sd(inderec$prolen3) / sqrt(inderec$prolen3)
+limite_inferior <- mean(inderec$prolen3) - 
+  1.96 * sd(inderec$prolen3) / sqrt(inderec$prolen3)
+
+
+```
+grafico de barras para el indice a traves de los años
+
+
+```{r}
+inderec$colour <- ifelse(inderec$prolen3 < 0, "negative","positive")
+
+indexplot <- ggplot(inderec,
+                    aes(rev(Year),prolen3))+
+  geom_bar(stat="identity",
+           position="identity",
+           aes(fill = colour))+
+  scale_fill_manual(values=c(negative="black",
+                             positive="firebrick1"),
+                    name="")+
+  scale_x_continuous(breaks = seq(from = 2000, 
+                                to = 2020, by = 1))+
+  theme_bw()+
+  labs(y="IRK",
+       x="",
+       title = "Index Recruit Krill 48.1 SubArea")+
+  coord_flip()
+indexplot
+```
+(Probar datos con RaadTools library [@Raadtools2022])
+
+## Maps length data
+
+First thing is get different rater layer to join krill data length
+according different porpoises.
+
+```{r raster}
+
+# Cargo linea de costa
+coast <- load_Coastline()
+coast1<- st_as_sf(coast) 
+coast2 = st_transform(coast1, "+proj=latlong +ellps=WGS84")
+# con SSMU
+ssmu <- load_SSMUs()
+ssmu481 <- subset(ssmu[c(2,3,4,5,6,7,17),])
+ssmu481a <- st_as_sf(ssmu481) 
+ssmu481aa = st_transform(ssmu481a, "+proj=latlong +ellps=WGS84")
+
+# con Statistical Areas con foco en 48.1
+suba <- load_ASDs()
+suba1 <- subset(suba[(3),])
+suba1a<- st_as_sf(suba1) 
+suba1aa = st_transform(suba1a, "+proj=latlong +ellps=WGS84")
+
+
+# Uso las agrupaciones de DMP1
+dmp1 <- st_read("~/DOCAS/Mapas/Antarctic_SHPfiles/D1MPA-model-2019.shp",
+                quiet=T)
+dmp1=st_transform(dmp1, 6932)
+
+# Uso las agrupaciones de Strata
+strata <- st_read("~/DOCAS/Mapas/Antarctic_SHPfiles/Strata.shp",
+                quiet=T)
+strata=st_transform(strata, "+proj=latlong +ellps=WGS84")
+```
+
+Show strata agregation to join length data (Figure\@ref(fig:maptest).
+
+```{r maptest, fig.cap="Strata Maps in 48.1"}
+# y testeo el mapa
+ssmap <- ggplot()+
+  geom_sf(data = strata, aes(fill=strata$ID, 
+                           alpha=0.3))+
+  # geom_sf(data = ssmu481aa, aes(fill=ssmu481aa$GAR_Short_Label, 
+  #                         alpha=0.3))+
+  geom_sf(data = coast2, colour="black", fill=NA)+
+  #geom_sf(data = gridcrop1, colour="black", fill=NA)+
+  #geom_sf(data= suba1aa, fill=NA)+
+  # geom_sf(aes(fill=ssmu481aa$GAR_Short_Label,
+  #              alpha=0.3))+
+  scale_fill_viridis_d(option = "F",
+                       name="Strata")+
+  #geom_sf_label(aes(label = strata$ID))+
+  # labs(fill = "SSMU")+
+  ylim(230000, 2220000)+
+  xlim(-3095349 , -1858911)+
+  # coord_sf(crs = 32610)+ #sistema de prpyecccion para campos completos
+  coord_sf(crs = 6932)+
+  scale_alpha(guide="none")+
+  theme_bw()
+ssmap
+```
+
+Test Strata SSMU, just to know another way to join data, but this kind of spatial structuration is deprecated to mamagemente use (Figure\@ref(fig:maptest2).
+
+```{r maptest2, fig.cap="SSMU Map in 48.1 SubArea"}
+# y testeo el mapa
+ssmumap <- ggplot()+
+  # geom_sf(data = strata, aes(fill=strata$ID, 
+  #                          alpha=0.3))+
+  geom_sf(data = ssmu481aa, aes(fill=ssmu481aa$GAR_Short_Label,
+                          alpha=0.3))+
+  geom_sf(data = coast2, colour="black", fill=NA)+
+  #geom_sf(data = gridcrop1, colour="black", fill=NA)+
+  geom_sf(data= suba1aa, fill=NA,
+          col="red")+
+  # geom_sf(aes(fill=ssmu481aa$GAR_Short_Label,
+  #              alpha=0.3))+
+  scale_fill_viridis_d(option = "G",
+                       name="SSMU")+
+  #geom_sf_label(aes(label = strata$ID))+
+  # labs(fill = "SSMU")+
+  ylim(230000, 2220000)+
+  xlim(-3095349 , -1858911)+
+  # coord_sf(crs = 32610)+ #sistema de prpyecccion para campos completos
+  coord_sf(crs = 6932)+
+  scale_alpha(guide="none")+
+  theme_bw()
+ssmumap
+```
+
+## Grouping Length data into Grid
+
+### SSMU 48.1 CCAMLR
+
+```{r ssmu1}
+names(ohbio4)
+ohbio5 <- ohbio4 %>% 
+  filter(asd_code==481) %>% 
+  dplyr::select(6, 7, 8, 9, 10, 11, 12) 
+ohbio6 <- st_as_sf(ohbio5 %>% 
+                     drop_na(latitude_set_end), 
+                   coords = c("longitude_set_end", "latitude_set_end"),  
+                  crs = "+proj=latlong +ellps=WGS84")
+```
+
+This grid has the same characteristics as the environmental data grids
+that will be called up later. This grid is 1x0.5 degrees which allows a
+clear visualization of the processes, whether biological and/or
+environmental.
+
+```{r gri}
+
+Grid<- suba1aa  %>% #pm481 es el plot base original linea 481
+  sf::st_make_grid(cellsize = c(1,0.5)) %>% # para que quede cuadrada
+  sf::st_cast("MULTIPOLYGON") %>%
+  sf::st_sf()  %>%  # objeto en spatial feature
+  dplyr::mutate(cellid = row_number()) 
+
+# Clean the input data by removing duplicate vertices and making the object topologically valid
+grid3 <- st_make_valid(Grid)
+
+# Corto la grilla dentro de las SSMU
+#gridcrop1 <- crop_shape(grid3, suba1aa, polygon = TRUE)
+
+# the first object drives the output geometry
+grilen <- grid3 %>%
+  st_join(ohbio6) %>% 
+  group_by(cellid)
+
+names(grilen)
+```
+
+Test lentgh mean map by Year
+
+```{r plogri}
+grilen3 <- grilen %>%
+  drop_na(length_total_cm) %>% 
+  dplyr::group_by(cellid,Year) %>% 
+  dplyr::summarise(lepro=mean(length_total_cm))
+
+ 
+
+
+gl <- ggplot() +
+   geom_sf(data=grilen3,
+           aes(fill = lepro), 
+           alpha=0.7, color=NA) +
+  scale_fill_viridis_b(option="G",
+                       name="Krill Length Fishery (cm.)",
+                       breaks = seq(0,8,1),
+                       direction=-1)+
+  geom_sf(data = suba1aa, fill=NA, col=2)+
+  geom_sf(data = coast2, colour="black", fill="grey")+
+  facet_wrap(~Year, ncol=6)+
+  theme(panel.background = element_rect(fill = 'aliceblue'),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())+
+  # ylim(-70, -60)+
+  # xlim(-70, -50)
+  # another kind projection
+  ylim(230000, 2220000)+
+  xlim(-3095349 , -1858911)+
+  #coord_sf(crs = 32610)+ #sistema de prpyecccion para campos completos
+  coord_sf(crs = 6932)
+gl
+```
+
+
+###  STRATA
+
+Length composition by Strata CCAMLR to visualization first. First step is group data into to poligons strata.
+
+```{r wranlingdata}
+class(ohbio6)
+dim(ohbio6)
+glimpse(ohbio6)
+
+class(strata)
+glimpse(strata)
+dim(strata)
+
+
+
+ohbiopro <- ohbio6 %>%
+  dplyr::group_by(gear_type, Year, Month, geometry) %>% 
+  dplyr::summarize(tapro = mean(length_total_cm))
+
+# comoprobar si tengo datos duplicados
+strata2 <- st_make_valid(strata)
+ohbio62 <- st_make_valid(ohbio6)
+
+
+
+sf3 <- st_join(strata2, ohbiopro)
+sf4 <- st_join(strata2, ohbio6)
+dim(sf4)
+dim(sf3)
+```
+
+
+
+
+```{r saveda, eval=FALSE}
+save("sf4", file = "sf4.RData")
+load("~/DOCAS/Data/Krill_Length_Cor/sf4.RData")
+```
+
+
+scattter plot lenght data
+```{r warning=F}
+lentraplot <- ggplot(sf3 %>% 
+                   filter(Year>2000,
+                      ID !="Outer"), 
+               aes(Year, tapro,
+               fill=Month))+
+    geom_point(alpha=0.3, 
+               shape=21, 
+               show.legend = T) +
+    scale_fill_viridis_c(option="G")+
+    geom_hline(yintercept = 4.16,
+               color = "black",
+               linetype  = 2)+
+    stat_smooth(method = "loess",
+                col="red")+
+    theme_bw()+ 
+    facet_wrap(.~ID)+
+    theme(axis.text.x = element_text(angle = 90, hjust = 2))+
+    guides(fill = guide_legend(reverse=F))+
+    
+    ylab("") +
+    xlab("") 
+lentraplot
+
+```
+histogram length data
+
+
+```{r}
+jzstrata <- ggplot(sf4 %>% 
+               filter(Year>2000,
+                      ID !="Outer"),
+             aes(x=length_total_cm, 
+                 y = as.factor(Year), 
+                 fill=ID))+
+  geom_density_ridges(stat = "binline", bins = 30, 
+                      scale = 1.9, 
+                      draw_baseline = FALSE,
+                      alpha=0.9)+
+  facet_wrap(.~ID, ncol=7) +   
+  geom_vline(xintercept = 3.6, color = "red")+
+  scale_x_continuous(breaks = seq(from = 1, to = 10, 
+                                  by = 2))+
+  scale_y_discrete(breaks = seq(from = 2000, 
+                                to = 2020, by = 1))+
+  scale_fill_viridis_d(name="SubArea",
+                       option="F")+
+  theme_minimal()+
+  xlab("Longitud (cm.)")+
+  ylab("")
+jzstrata
+```
+
+Violin plot by strata
+
+```{r}
+
+viostra <- ggplot(sf4 %>% 
+               filter(Year>2000,
+                      ID !="Outer"),
+             aes(x=length_total_cm, 
+                 y = as.factor(Year), 
+                 fill=ID))+
+  scale_fill_viridis_d(name="Strata",
+                       option="F")+
+  geom_violin(alpha=0.8)+
+  geom_boxplot(width=0.1,
+               outlier.shape = NA,
+               show.legend = FALSE)+
+  geom_vline(xintercept = 3.6, color = "red")+
+  facet_wrap(.~ID, ncol=7) + 
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1))+
+  ylab("")+
+  xlab("Length (cm.)")
+viostra
+
+```
+
+maps length
+
+```{r}
+glstrata <- ggplot() +
+   geom_sf(data=sf3%>% 
+             drop_na(tapro) %>% 
+               filter(Year>1999,
+                      ID !="Outer"),
+           aes(fill = tapro), 
+           color=NA) +
+  scale_fill_viridis_b(option="C",
+                       name="cm.",
+                       breaks = seq(0,6,0.5),
+                       direction=-1)+
+  geom_sf(data = strata, fill=NA, col=2)+
+  geom_sf(data = coast2, colour="black", fill="grey")+
+  facet_wrap(~Year, ncol=6)+
+  theme(panel.background = element_rect(fill = 'aliceblue'),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank())+
+  # ylim(-70, -60)+
+  # xlim(-70, -50)
+  # another kind projection
+  ylim(230000, 2220000)+
+  xlim(-3095349 , -1858911)+
+  #coord_sf(crs = 32610)+ #sistema de prpyecccion para campos completos
+  coord_sf(crs = 6932)+
+  labs(title = "Mean Length Krill by Strata and Year")
+glstrata
+```
+
+Prepare template length data by strata for posterior analysis like "Intrinsic Productivity". We can found this in this [link](https://github.com/MauroMardones/LBSPR_Krill)
+
+#### Grouping by strata
+
+```{r eval=FALSE, echo=TRUE}
+# Maybe this could be a loop , but i didnt find the way...
+# Elephan Island
+ei <- sf4 %>% 
+  drop_na(length_total_cm) %>% 
+  filter(ID== "EI")  
+# cut in order
+ei$catlon <- cut(x = ei$length_total_cm, 
+                 breaks = seq(0,7,0.2),
+                 labels = seq(0,6.8,0.2),
+                 right = FALSE)
+
+eit <- table(ei$Year, ei$catlon)
+eit1 <-t(as.data.frame.matrix(eit)); class(eit1)
+
+
+# SSIW
+ssiw <- sf4 %>% 
+  drop_na(length_total_cm) %>% 
+  filter(ID== "SSIW")  
+# cut in order
+ssiw$catlon <- cut(x = ssiw$length_total_cm, 
+                 breaks = seq(0,7,0.2),
+                 labels = seq(0,6.8,0.2),
+                 right = FALSE)
+
+ssiwt <- table(ssiw$Year, ssiw$catlon)
+ssiwt1 <-t(as.data.frame.matrix(ssiwt)); class(ssiwt1)
+
+# BS
+bs <- sf4 %>% 
+  drop_na(length_total_cm) %>% 
+  filter(ID== "BS")  
+# cut in order
+bs$catlon <- cut(x = bs$length_total_cm, 
+                 breaks = seq(0,7,0.2),
+                 labels = seq(0,6.8,0.2),
+                 right = FALSE)
+
+bst <- table(bs$Year, bs$catlon)
+bst1 <-t(as.data.frame.matrix(bst)); class(bst1)
+
+# JOIN  (very poor data, just a couple years)
+join <- sf4 %>% 
+  drop_na(length_total_cm) %>% 
+  filter(ID== "JOIN")  
+# cut in order
+join$catlon <- cut(x = join$length_total_cm, 
+                 breaks = seq(0,7,0.2),
+                 labels = seq(0,6.8,0.2),
+                 right = FALSE)
+
+joint <- table(join$Year, join$catlon)
+joint1 <-t(as.data.frame.matrix(joint)); class(joint1)
+
+# Extra
+extra <- sf4 %>% 
+  drop_na(length_total_cm) %>% 
+  filter(ID== "Extra")  
+# cut in order
+extra$catlon <- cut(x = extra$length_total_cm, 
+                 breaks = seq(0,7,0.2),
+                 labels = seq(0,6.8,0.2),
+                 right = FALSE)
+
+extrat <- table(extra$Year, extra$catlon)
+extrat1 <-t(as.data.frame.matrix(extrat)); class(extrat1)
+```
+
+Generate the files to use in intrinsic productivity analysis.
+
+```{r eval=FALSE, echo=TRUE, warning=FALSE}
+# A su vez puedo generar el archivo por separado
+write.csv(eit1, "lenghtEI.csv", sep = ",", row.names = TRUE)
+write.csv(ssiwt1, "lenghtSSIW.csv", sep = ",", row.names = TRUE)
+write.csv(bst1, "lenghtBS.csv", sep = ",", row.names = TRUE)
+write.csv(joint1, "lenghtJOIN.csv", sep = ",", row.names = TRUE)
+write.csv(extrat1, "lenghtExtra.csv", sep = ",", row.names = TRUE)
+
+```
+
+
+## Environmental data
+
+Load environmental data to merge with length.
+
+
+```{r echo=FALSE}
+datae <- load("~/DOCAS/Data/KrillLows/DataEnvKrill.RData")
+```
+
+Get data specific object
+
+```{r include=FALSE}
+ls()
+get("dataenvf")
+```
+
+Join length and environental data by `cellid` and `Year` with a reduce
+DB.
+
+```{r}
+class(dataenvf)
+
+envgru <- dataenvf %>%
+  dplyr::select(1, 2, 3, 6, 9) %>% 
+  drop_na(ANO.x) %>% 
+  dplyr::rename(Year=ANO.x) %>% 
+  dplyr::group_by(cellid,Year) %>% 
+  dplyr::summarise(meansic2=mean(meansic),
+                   meanchl2=mean(meanchl),
+                   meantsm2=mean(meantsm))
+dim(envgru)
+summary(envgru)
+
+# Test
+envgru2 <- dataenvf %>%
+  dplyr::select(1, 2, 3, 6, 9, 10) %>% 
+  drop_na(ANO.x) %>% 
+  dplyr::rename(Year=ANO.x) %>% 
+  dplyr::group_by(cellid,Year, geometry) %>% 
+  dplyr::summarise(meansic2=mean(meansic),
+                   meanchl2=mean(meanchl),
+                   meantsm2=mean(meantsm))
+```
+
+Join merge object in a new data base.
+
+```{r}
+names(grilen3)
+names(envgru)
+envlen <- merge(grilen3, envgru, 
+                 by = c("cellid", "Year"))
+# change names
+
+envname <- envlen %>% 
+  dplyr::rename(Length=lepro,
+         SIC=meansic2,
+         CHla=meanchl2,
+         SSM=meantsm2)
+head(envname)
+```
+
+# Results
+
+## GLM Length-Environmental
+
+Debo trabajar ciertos componentes de los datos para poder hacer el
+analisis bajo supuestos estructurales.
+
+-   Comprobar distribución de Longitudes medias de krill
+-   Cambiar a factor `Year` y `cellid`
+-   Filtrar datos `NA`
+-   Filtrar outliers en datos ambientales
+
+### Test Correlation
+
+Test de comportamiento de la variable de longitudes `lenpro` mediante 2
+test; 1) Shapiro-Wilk `shapiro.test()` y Kolmogorov-Smirnov `ks.test()`
+
+```{r}
+shapiro.test(envname$Length)
+ks.test(envname$Length, "pnorm", mean(envname$Length), sd(envname$Length))
+tal<-ggplot(envname, aes(x=Length)) + 
+  geom_histogram(color="red", fill="white")+
+  theme_minimal()+
+  labs(x="Length Mean Krill (cm.)",
+       y="Frecuency")
+tal
+```
+
+### Cambiar a factor `Year` y `cellid`
+
+```{r}
+envname$Year<-as.factor(envname$Year)
+envname$cellid<-as.factor(envname$cellid)
+glimpse(envname)
+```
+
+### Filtrar datos `NA` if we have. Test
+
+```{r}
+# Are there missing values?
+colSums(is.na(envname))
+```
+
+### Filter outliers environmental and biological data
+
+Test trought plot all variables in `envlen` object
+
+```{r}
+boxsic <- ggplot(envname)+
+  geom_boxplot(aes(Year, SIC),
+               outlier.colour = "red")+
+  ylim(0,50)+
+  theme_minimal()
+boxtsm <- ggplot(envname)+
+  geom_boxplot(aes(Year, SSM-270),
+               outlier.colour = "red")+
+  labs(y="TSM")+
+  theme_minimal()
+boxchl <- ggplot(envname)+
+  geom_boxplot(aes(Year, CHla),
+               outlier.colour = "red")+
+  theme_minimal()
+ggarrange(boxsic, boxtsm, boxchl, nrow = 3)
+
+```
+
+is necessary get off outliers from Sea ice index. Get environmental
+outliers data and again...
+
+```{r warning=F, message=FALSE}
+envlen2 <- envlen %>% 
+  filter(meansic2<100)
+
+#plot 2
+         
+boxsic2 <- ggplot(envlen2)+
+  geom_boxplot(aes(Year, meansic2),
+               outlier.colour = "red")+
+  theme_minimal()
+boxtsm2 <- ggplot(envlen2)+
+  geom_boxplot(aes(Year, meantsm2),
+               outlier.colour = "red")+
+  theme_minimal()
+boxchl2 <- ggplot(envlen2)+
+  geom_boxplot(aes(Year, meanchl2),
+               outlier.colour = "red")+
+  theme_minimal()
+
+p<-ggplot(envlen2, aes(x=meansic2)) + 
+  geom_histogram(color="black", fill="white")+
+  theme_minimal()
+
+q<-ggplot(envlen2, aes(x=meantsm2)) + 
+  geom_histogram(color="black", fill="white")+
+  theme_minimal()
+
+t<-ggplot(envlen2, aes(x=meanchl2)) + 
+  geom_histogram(color="black", fill="white")+
+  theme_minimal()
+
+ggarrange(boxsic2, boxtsm2, boxchl2, p, q, t, nrow = 2, ncol=3)
+```
+
+## Correlation Analysis
+
+## Simple correlation identification toget information about variables
+
+Firts filter in our dataframe `envlen3`.
+
+Regarding difference between `Spearman` and `pearson`, both, the
+Spearman test and the Pearson test are statistical methods used to
+assess the correlation between two variables. The main difference
+between them is that the Pearson test evaluates the linear correlation
+between two continuous variables, while the Spearman test evaluates the
+monotonic correlation between two continuous or order variables.
+
+In the case of the Pearson test, the degree of association between two
+continuous variables is measured through a correlation coefficient that
+varies between -1 and 1. A value of 1 indicates a perfectly positive
+correlation, a value of -1 indicates a perfectly negative correlation,
+and a value of 0 indicates no correlation between the two variables.
+
+On the other hand, the Spearman test is based on the range of the
+variables, instead of the actual values. In other words, this test
+evaluates the correlation between two order variables, where the values
+of each variable are ranked from lowest to highest, and ranges are used
+instead of actual values. Spearman's correlation coefficient also varies
+between -1 and 1, but it measures the monotonic correlation between two
+variables, that is, if one variable increases, the other variable also
+increases or decreases[@McCulloch2001].
+
+In summary, the main difference between the Spearman test and the
+Pearson test is that the former is used to assess the monotonic
+correlation between two order variables, while the latter is used to
+assess the linear correlation between two continuous variables.
+
+-   Spearman's Rank Correlation Coefficient
+
+This coefficient is used to see if there is any significant relationship
+between the two datasets, and operates under the assumption that the
+data being used is ordinal, which here means that the numbers do not
+indicate quantity, but rather they signify a position of place of the
+subject's standing (e.g. 1st, 2nd, 3rd, etc.)
+
+$\begin{aligned} r_s = \frac{\sum_{i=1}^n (x_i - \bar{x})(y_i - \bar{y})}{\sqrt{\sum_{i=1}^n (x_i - \bar{x})^2}\sqrt{\sum_{i=1}^n (y_i - \bar{y})^2}} \end{aligned}$
+
+-   Pearson Product-Moment Coefficient
+
+This is the most widely used correlation analysis formula, which
+measures the strength of the 'linear' relationships between the raw data
+from both variables, rather than their ranks. This is an dimensionless
+coefficient, meaning that there are no data-related boundaries to be
+considered when conducting analyses with this formula, which is a reason
+why this coefficient is the first formula researchers try.
+
+$\begin{aligned} r = 1- \frac{6\sum_{i=1}^n D_{i}^n}{n (n^2 - 1)}\end{aligned}$
+
+(Is posible report outpus by @Report2023)
+
+```{r}
+# change to data frame
+envlen3 <- as.data.frame(envlen2)
+envlen4 <- envlen3 %>% 
+  dplyr::select(3, 4, 5, 6)
+```
+
+Plot to show correlation trough different ways. First, the matri
+correlation
+
+```{r}
+kableExtra::kable(cor(envlen4)) %>% 
+  kable_styling()
+# covariance matrix
+kableExtra::kable(cov(envlen4)) %>% 
+  kable_styling()
+```
+
+
+```{r message=FALSE, warning=FALSE}
+pairs.panels(envlen4 %>% 
+               dplyr::rename(Length=lepro,
+         SIC=meansic2,
+         CHla=meanchl2,
+         SSM=meantsm2),
+             smooth = TRUE,      
+             scale = FALSE,      
+             density = TRUE,     
+             ellipses = TRUE,  
+             method = "pearson",
+             pch = 21,           
+             lm = FALSE,        
+             cor = TRUE,         
+             jiggle = FALSE,     
+             factor = 2,        
+             hist.col = 4,       # Color de los histogramas
+             stars = TRUE)
+```
+
+```{r message=FALSE, warning=FALSE}
+resu <- correlation(envlen4 %>%
+               dplyr::rename(Length=lepro,
+         SIC=meansic2,
+         CHla=meanchl2,
+         SSM=meantsm2))
+resu
+summary(resu, redundant=TRUE)
+```
+
+We can identify through a correlation matrix the data of our set,
+whether it is positive or negative. See Figure \@ref(fig:coorplot).
+
+```{r corrplot, fig.cap="Correlation Matrix", message=FALSE, warning=FALSE}
+resu %>%
+  summary(redundant = TRUE) %>%
+  plot()
+```
+
+```{r message=FALSE, warning=FALSE}
+plot(correlation(envlen4, partial = TRUE)) +
+  scale_edge_color_continuous(low = "#000004FF", high = "#FCFDBFFF")
+```
+
+Here we can identify the correlation that exists between krill length
+and chlorophyla (-) and krill length and SST (+)
+
+## GLM models
+
+Come back with `envlen2` object.
+
+```{r}
+names(envlen2)
+# [1] "cellid"   "Year"     "lepro"    "meansic2" "meanchl2"
+# [6] "meantsm2" "geometry"
+env1 <- glm(lepro ~ Year,
+            data = envlen2)
+env2 <- glm(lepro ~ Year + 
+              meansic2,
+            data = envlen2)
+env3 <- glm(lepro ~ Year + 
+              meansic2 +
+              meanchl2 ,
+            data = envlen2)
+env4 <- glm(lepro ~ Year + 
+              meansic2 +
+              meanchl2 + 
+              meantsm2 ,
+            data = envlen2)
+#spatial component
+env5 <- glm(lepro ~ Year + 
+              meansic2 +
+              meanchl2 + 
+              meantsm2 +
+              cellid,
+            data = envlen2)
+```
+
+test with @Ludecke2021
+
+Table with significance level (***).
+```{r}
+#summary(env4)
+tab_model(env1, 
+          env2,
+          env3, 
+          env4, p.style = "stars")
+
+```
+
+
+Table comparing performance model. 
+```{r warning=F}
+compare_performance(env1, 
+                    env2,
+                    env3,
+                    env4,
+                    env5,
+                    env1m,
+                    rank = TRUE, verbose = FALSE)
+```
+
+Regarding this result, we can select **best model** and check some assumtion like:
+
+- Colinealidad
+- Data points influyentes
+- Homoscedasticidad
+- Normalidad de los residuos 
+- Independencia
+
+In this case, is `env4`
+
+```{r fig.height=3, fig.width=3,  warning=F}
+check_model(env1)
+```
+
+```{r}
+plot(compare_performance(env1, 
+                         env2, 
+                         env3,
+                         env4,
+                         rank = TRUE),
+     name="LM to length krill data vs Env")
+```
+
+Comparative table acrosss models.
+
+```{r}
+compare_performance(env1, 
+                    env2, 
+                    env3,
+                    env4, 
+                    env5)
+
+
+```
+```{r}
+AIC(env1)
+AIC(env2)
+AIC(env3)
+AIC(env4)
+deviance(env1)
+deviance(env2)
+deviance(env3)
+deviance(env4)
+
+library(lmtest)
+lrtest0<-lrtest(env1,env2,env3,env4)
+lrtest0
+plot_model(env4)+
+  theme_bw()
+```
+
+## GLMM models
+
+Random effects are a way to model variability in data that comes from
+factors that cannot be directly measured or controlled. In the context
+of statistical models, random effects refer to variables that are
+assumed to have an unknown probability distribution, and are included in
+the model to explain some of the variation in the data.
+
+For example, in a study comparing the test scores of students at
+different schools, random effects refer to differences between schools
+that cannot be explained by variables measured in the study, such as
+students' socioeconomic status. These differences may be caused by
+factors such as the quality of teaching, school culture, or geographic
+location.
+
+Random effects are often modeled by using mixed effects models, which
+combine random and fixed effects in the same model. Fixed effects are
+those that are assumed to be constant for all study units and are
+directly measured, while random effects are those that are assumed to
+vary randomly across study units and cannot be directly measured.
+
+In short, random effects are a way of modeling variability in data that
+cannot be directly explained by the variables measured in the study, and
+are included in the model to improve the precision of the estimates and
+reduce the potential for bias [@McCulloch2001].
+
+In this cae we try test spatial componenten in `cellid` variable like
+random effects with `lme4` package [@Bates2015].
+
+```{r}
+env1m <- lmer(lepro ~ Year + 
+             meanchl2 + 
+             meansic2 + 
+             meantsm2 + (1|cellid), 
+           data = envlen)
+
+env2m <- lmer(lepro ~ Year + 
+             meanchl2 + 
+             meansic2 + 
+             meantsm2 + (1|meanchl2), 
+           data = envlen)
+```
+
+
+```{r warning=FALSE, message=FALSE}
+# graficar efectos aleatorios
+pre <- plot_model(env1m,type = "re", 
+                facet.grid=TRUE, 
+                free.scale = FALSE, 
+                title = NULL, 
+                vline.color = "darkgrey",
+                sort.est = TRUE,
+                colors = "Set1",
+                show.data = TRUE,
+                jitter = 0.2,
+                terms = "Days")+
+  theme_minimal()
+
+pest <- plot_model(env1m,type = "est", 
+                facet.grid=FALSE, 
+                free.scale = FALSE, 
+                title = NULL, 
+                vline.color = "darkgrey",
+                sort.est = TRUE,
+                colors = "Set2",
+                show.data = TRUE,
+                jitter = 0.2)+
+  theme_minimal()
+
+ggarrange(pre, pest, ncol = 2)
+```
+
+```{r}
+env_ranef <- ranef(env1m)
+summary(env_ranef)
+mean(env_ranef$cellid[, 1])
+```
+
+# Conclusion
+
+-   On the one hand, the models with mixed effects serve to verify the
+    influence of the spatial component, in this case each cell y in
+    which the data of the dependent variable (krill sizes) and the
+    independent variable (environmental variables) were considered.
+
+-   The influence of environmental variables on the sizes of the krill
+    fishery is corroborated. The environmental variable with the
+    greatest impact on krill sizes is Chlorophyll in negative terms. In
+    other words, the more chlorophyll in the environment, the sizes
+    decrease because there is greater recruitment due to the abundance
+    of substrate for the krill population.
+
+-   In a way, it is proof that the krill population structure is
+    influenced not only by fishing pressure, but also by environmental
+    conditions.
+
+-   With these results, the environmental component is solidly
+    incorporated into the krill stock assessment model in the Antarctic
+    Peninsula, specifically in Subarea 48.1.
+
+# References
+
+
