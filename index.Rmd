@@ -75,16 +75,19 @@ methodological analysis to correlate environmental variables with the
 population dynamics of krill (*Euphausia superba*), in this case, with a
 biological component like lengths from fishery monitoring.
 
+# Packages used 
+
+@heatwavesR, @reraddp2023
+
 # Secuencia analysis
 
-- Cargar shapefiles de los estratas
+- Cargar shapefiles de los stratas
 - Cargar datos Ambientales `dataenvf`
 - Cargar datos de de longitud krill `sf4`
 
 
 ```{r}
-strata <- st_read("~/DOCAS/Mapas/Antarctic_SHPfiles/Strata.shp",
-                quiet=T)
+strata <- st_read("Strata.shp", quiet=T)
 strata=st_transform(strata, "+proj=latlong +ellps=WGS84")
 ```
 
@@ -126,5 +129,7 @@ gchl <- st_as_sf(datchl, coords = c("lon", "lat"),
     Peninsula, specifically in Subarea 48.1.
 
 # References
+
+
 
 
