@@ -72,8 +72,9 @@ library(sjPlot)
 
 The following document intends to carry out a complementary
 methodological analysis to correlate environmental variables with the
-population dynamics of krill (*Euphausia superba*), in this case, with a
-biological component like lengths from fishery monitoring.
+population dynamics of krill (*Euphausia superba*), in this case, with a biological component like lengths from fishery monitoring.
+
+The main idea is join length and covariabes into strata polygons.
 
 # Packages used 
 
@@ -85,14 +86,14 @@ biological component like lengths from fishery monitoring.
 - Cargar datos Ambientales `dataenvf`
 - Cargar datos de de longitud krill `sf4`
 
-
 ```{r}
-strata <- st_read("Strata.shp", quiet=T)
-strata=st_transform(strata, "+proj=latlong +ellps=WGS84")
+load("datgeo5.RData")
+load("datchl.RData")
+load("dattsm.RData")
+load("~/DOCAS/Data/KrillLows/DataEnvKrill.RData")
 ```
 
-
-Primero los datos a una tippo `sf`.
+change lat-long format to `sf`.
 
 ```{r ssmu1}
 #Transformo
@@ -106,6 +107,38 @@ gtsm <- st_as_sf(dattsm , coords = c("lon", "lat"),
 gchl <- st_as_sf(datchl, coords = c("lon", "lat"),  
                   crs = "+proj=latlong +ellps=WGS84")
 ```
+
+
+
+Join
+
+```{r}
+joinenv <- list(as.data.frame(gsic),
+           as.data.frame(gtsm),
+           as.data.frame(gchl)) %>% 
+        reduce(full_join, by='geometry', 'ANO')
+
+joinenv2 <- list(as.data.frame(gsic),
+           as.data.frame(gtsm),
+           as.data.frame(gchl)) %>% 
+        reduce(full_join, by='geometry')
+```
+
+
+
+```{r}
+strata <- st_read("Strata.shp", quiet=T)
+strata=st_transform(strata, "+proj=latlong +ellps=WGS84")
+```
+
+```{r}
+# comoprobar si tengo datos duplicados
+strata2 <- st_make_valid(strata)
+dataenvi <- st_make_valid(gsiv)
+
+```
+
+
 # Conclusion
 
 -   On the one hand, the models with mixed effects serve to verify the
