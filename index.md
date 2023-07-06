@@ -2,7 +2,7 @@
 title: "Correlation analysis Krill recriutment and environmental covariables"
 subtitle: "Stock assessment krill populations supplementary methods"
 author: "Mardones, M; Rebolledo, L. ; Krugger, L."
-date:  "`r format(Sys.time(), '%d %B, %Y')`"
+date:  "06 July, 2023"
 bibliography: heatwave.bib
 csl: apa.csl
 link-citations: yes
@@ -26,7 +26,8 @@ editor_options:
     wrap: 72
 ---
 
-```{r setup1}
+
+```r
 rm(list = ls())
 knitr::opts_chunk$set(echo = TRUE,
                       message = FALSE,
@@ -40,7 +41,8 @@ options(bitmapType = "cairo")
 # Lo mapas se hacen mas rapido
 ```
 
-```{r message=F}
+
+```r
 library(reshape2)
 library(tidyverse)
 library(plyr)
@@ -65,7 +67,6 @@ library(PerformanceAnalytics)
 library(psych)
 library(lme4)
 library(sjPlot)
-
 ```
 
 # Background
@@ -86,7 +87,8 @@ The main idea is join length and covariabes into strata polygons.
 - Cargar datos Ambientales `dataenvf`
 - Cargar datos de de longitud krill `sf4`
 
-```{r eval=F}
+
+```r
 load("datgeo5.RData")
 load("datchl.RData")
 load("dattsm.RData")
@@ -95,7 +97,8 @@ load("~/DOCAS/Data/KrillLows/DataEnvKrill.RData")
 
 change lat-long format to `sf`.
 
-```{r ssmu1, eval =FALSE}
+
+```r
 #Transformo
 #Hielo
 gsic <- st_as_sf(datgeo5, coords = c("longitud", "latitud"),  
@@ -112,7 +115,8 @@ gchl <- st_as_sf(datchl, coords = c("lon", "lat"),
 
 Join
 
-```{r eval=FALSE}
+
+```r
 joinenv <- list(as.data.frame(gsic),
            as.data.frame(gtsm),
            as.data.frame(gchl)) %>% 
@@ -126,23 +130,25 @@ joinenv2 <- list(as.data.frame(gsic),
 
 
 
-```{r}
+
+```r
 strata <- st_read("Strata.shp", quiet=T)
 strata=st_transform(strata, "+proj=latlong +ellps=WGS84")
 ```
 
 
-```{r}
+
+```r
 stratasub <- st_read("Clipped_Strata.shp", quiet=T)
 stratasub <- st_transform(stratasub, "+proj=latlong +ellps=WGS84")
-
 ```
 
 
 
 plot simple 
 
-```{r}
+
+```r
 ssmap <- ggplot()+
   geom_sf(data = stratasub, aes(fill=stratasub$ID, 
                            alpha=0.3))+
@@ -165,9 +171,12 @@ ssmap <- ggplot()+
   theme_bw()
 ssmap
 ```
+
+<img src="index_files/figure-html/unnamed-chunk-6-1.jpeg" style="display: block; margin: auto;" />
 plot simple 
 
-```{r}
+
+```r
 ssmap <- ggplot()+
   geom_sf(data = strata, aes(fill=strata$ID, 
                            alpha=0.3))+
@@ -191,11 +200,13 @@ ssmap <- ggplot()+
 ssmap
 ```
 
-```{r eval=FALSE}
+<img src="index_files/figure-html/unnamed-chunk-7-1.jpeg" style="display: block; margin: auto;" />
+
+
+```r
 # comoprobar si tengo datos duplicados
 strata2 <- st_make_valid(strata)
 dataenvi <- st_make_valid(gsiv)
-
 ```
 
 
