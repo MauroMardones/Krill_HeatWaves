@@ -131,6 +131,68 @@ strata <- st_read("Strata.shp", quiet=T)
 strata=st_transform(strata, "+proj=latlong +ellps=WGS84")
 ```
 
+
+```{r}
+stratasub <- st_read("StrataRV.shp", quiet=T)
+stratasub <- st_transform(stratasub, "+proj=latlong +ellps=WGS84")
+
+shp<-shapefile("StrataSub.shp")
+plot(shp)
+```
+
+
+
+plot simple 
+
+```{r}
+ssmap <- ggplot()+
+  geom_sf(data = stratasub, aes(fill=stratasub$ID, 
+                           alpha=0.3))+
+  # geom_sf(data = ssmu481aa, aes(fill=ssmu481aa$GAR_Short_Label, 
+  #                         alpha=0.3))+
+  #geom_sf(data = coast2, colour="black", fill=NA)+
+  #geom_sf(data = gridcrop1, colour="black", fill=NA)+
+  #geom_sf(data= suba1aa, fill=NA)+
+  # geom_sf(aes(fill=ssmu481aa$GAR_Short_Label,
+  #              alpha=0.3))+
+  scale_fill_viridis_d(option = "F",
+                       name="Strata")+
+  #geom_sf_label(aes(label = strata$ID))+
+  # labs(fill = "SSMU")+
+  ylim(230000, 2220000)+
+  xlim(-3095349 , -1858911)+
+  # coord_sf(crs = 32610)+ #sistema de prpyecccion para campos completos
+  coord_sf(crs = 6932)+
+  scale_alpha(guide="none")+
+  theme_bw()
+ssmap
+```
+plot simple 
+
+```{r}
+ssmap <- ggplot()+
+  geom_sf(data = strata, aes(fill=strata$ID, 
+                           alpha=0.3))+
+  # geom_sf(data = ssmu481aa, aes(fill=ssmu481aa$GAR_Short_Label, 
+  #                         alpha=0.3))+
+  #geom_sf(data = coast2, colour="black", fill=NA)+
+  #geom_sf(data = gridcrop1, colour="black", fill=NA)+
+  #geom_sf(data= suba1aa, fill=NA)+
+  # geom_sf(aes(fill=ssmu481aa$GAR_Short_Label,
+  #              alpha=0.3))+
+  scale_fill_viridis_d(option = "F",
+                       name="Strata")+
+  #geom_sf_label(aes(label = strata$ID))+
+  # labs(fill = "SSMU")+
+  ylim(230000, 2220000)+
+  xlim(-3095349 , -1858911)+
+  # coord_sf(crs = 32610)+ #sistema de prpyecccion para campos completos
+  coord_sf(crs = 6932)+
+  scale_alpha(guide="none")+
+  theme_bw()
+ssmap
+```
+
 ```{r}
 # comoprobar si tengo datos duplicados
 strata2 <- st_make_valid(strata)
