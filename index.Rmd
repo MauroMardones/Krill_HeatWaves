@@ -68,6 +68,21 @@ library(sjPlot)
 
 ```
 
+
+
+```{r}
+My_theme <- theme(axis.text.y = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  axis.ticks.x=element_blank(),
+                  panel.background = element_blank(),
+                  panel.border = element_rect(fill = NA, size = 1),
+                  strip.background = element_rect(fill = "white", 
+                                                  color = "white", size = 1),
+                  text = element_text(size = 14),
+                  panel.grid.major = element_line(colour = "white", size = 0.1),
+                  panel.grid.minor = element_line(colour = "white", size = 0.1))
+```
+
 # Background
 
 The following document intends to carry out a complementary
@@ -91,44 +106,25 @@ load("datgeo5.RData")
 load("datchl.RData")
 load("dattsm.RData")
 load("~/DOCAS/Data/KrillLows/DataEnvKrill.RData")
+BioKrill <- readRDS("~/DOCAS/Data/565_C1_KRI_2021-10-01/565_C1_KRI_2021-10-01_txt/BioKrill.Rds")
 ```
+
+
+```{r}
+biokrill2 <- BioKrill %>% 
+  dplyr::select(7, 8, 9, 17, 18, 20, 29, 31, 32) %>% 
+  filter(asd_code=="481") 
+  
+dim(biokrill2)
+```
+
 
 change lat-long format to `sf`.
 
 ```{r ssmu1, eval =FALSE}
 #Transformo
-#Hielo
-gsic <- st_as_sf(datgeo5, coords = c("longitud", "latitud"),  
-                  crs = "+proj=latlong +ellps=WGS84") 
-# TSM
-gtsm <- st_as_sf(dattsm , coords = c("lon", "lat"),  
+krillgeo <- st_as_sf(biokrill2, coords = c("longitude_haul_start", "latitude_haul_start"),  
                   crs = "+proj=latlong +ellps=WGS84")
-
-gchl <- st_as_sf(datchl, coords = c("lon", "lat"),  
-                  crs = "+proj=latlong +ellps=WGS84")
-```
-
-
-
-Join
-
-```{r eval=FALSE}
-joinenv <- list(as.data.frame(gsic),
-           as.data.frame(gtsm),
-           as.data.frame(gchl)) %>% 
-        reduce(full_join, by='geometry', 'ANO')
-
-joinenv2 <- list(as.data.frame(gsic),
-           as.data.frame(gtsm),
-           as.data.frame(gchl)) %>% 
-        reduce(full_join, by='geometry')
-```
-
-
-
-```{r}
-strata <- st_read("Strata.shp", quiet=T)
-strata=st_transform(strata, "+proj=latlong +ellps=WGS84")
 ```
 
 
@@ -139,46 +135,12 @@ stratasub <- st_transform(stratasub, "+proj=latlong +ellps=WGS84")
 ```
 
 
-
-plot simple 
-
 ```{r}
+# y testeo el mapa
 ssmap <- ggplot()+
   geom_sf(data = stratasub, aes(fill=stratasub$ID, 
                            alpha=0.3))+
-  # geom_sf(data = ssmu481aa, aes(fill=ssmu481aa$GAR_Short_Label, 
-  #                         alpha=0.3))+
-  #geom_sf(data = coast2, colour="black", fill=NA)+
-  #geom_sf(data = gridcrop1, colour="black", fill=NA)+
-  #geom_sf(data= suba1aa, fill=NA)+
-  # geom_sf(aes(fill=ssmu481aa$GAR_Short_Label,
-  #              alpha=0.3))+
-  scale_fill_viridis_d(option = "F",
-                       name="Strata")+
-  #geom_sf_label(aes(label = strata$ID))+
-  # labs(fill = "SSMU")+
-  ylim(230000, 2220000)+
-  xlim(-3095349 , -1858911)+
-  # coord_sf(crs = 32610)+ #sistema de prpyecccion para campos completos
-  coord_sf(crs = 6932)+
-  scale_alpha(guide="none")+
-  theme_bw()
-ssmap
-```
-plot simple 
-
-```{r}
-ssmap <- ggplot()+
-  geom_sf(data = strata, aes(fill=strata$ID, 
-                           alpha=0.3))+
-  # geom_sf(data = ssmu481aa, aes(fill=ssmu481aa$GAR_Short_Label, 
-  #                         alpha=0.3))+
-  #geom_sf(data = coast2, colour="black", fill=NA)+
-  #geom_sf(data = gridcrop1, colour="black", fill=NA)+
-  #geom_sf(data= suba1aa, fill=NA)+
-  # geom_sf(aes(fill=ssmu481aa$GAR_Short_Label,
-  #              alpha=0.3))+
-  scale_fill_viridis_d(option = "F",
+  scale_fill_viridis_d(option = "D",
                        name="Strata")+
   #geom_sf_label(aes(label = strata$ID))+
   # labs(fill = "SSMU")+
@@ -192,11 +154,54 @@ ssmap
 ```
 
 ```{r eval=FALSE}
-# comoprobar si tengo datos duplicados
-strata2 <- st_make_valid(strata)
-dataenvi <- st_make_valid(gsiv)
 
+# comoprobar si tengo datos duplicados
+stratasub1 <- st_make_valid(stratasub)
+krillgeo1 <- st_make_valid(krillgeo)
+krill.strata <- st_join(stratasub1, krillgeo1)
 ```
+
+
+## Calculate Index Recruit
+
+```{r eval=FALSE}
+inderec <- krill.strata %>% 
+  drop_na(length_total_cm) %>% 
+  dplyr::group_by(season_ccamlr,ID) %>% 
+  dplyr::mutate(prolen = length_total_cm - 4.16) %>% 
+  dplyr::mutate(prolen2 = prolen*-1) %>% 
+  dplyr::summarize(prolen3 =mean(prolen2))
+
+
+sdlen <- sd(inderec$prolen3)
+names(inderec)
+summary(inderec)
+```
+
+
+```{r}
+inderec$colour <- ifelse(inderec$prolen3 < 0, "negative","positive")
+
+indexplot <- ggplot(inderec,
+                    aes(rev(season_ccamlr),prolen3))+
+  geom_bar(stat="identity",
+           position="identity",
+           aes(fill = colour))+
+  scale_fill_manual(values=c(positive="firebrick1",
+                             negative="black"),
+                    name="")+
+  scale_x_continuous(breaks = seq(from = 2000, 
+                                to = 2020, by = 5))+
+  facet_wrap(.~ID, ncol=4)+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(y="IRK",
+       x="",
+       title = "Index Recruit Krill by Strata")
+indexplot
+```
+
+
 
 
 # Conclusion

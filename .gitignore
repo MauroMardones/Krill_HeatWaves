@@ -2,4 +2,5 @@
 .Rhistory
 .RData
 .Ruserdata
-.RData
+*sf4.RData
+*BioKrill.RData
