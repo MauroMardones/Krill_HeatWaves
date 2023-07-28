@@ -167,7 +167,7 @@ krill.strata <- st_join(stratasub1, krillgeo1)
 #saveRDS(krill.strata, "KrillData.Rdata")
 ```
 
-```{r}
+```{r eval=FAlSE}
 krill.strata<-readRDS("KrillData.Rdata") 
 ```
 
