@@ -171,6 +171,7 @@ krill.strata <- st_join(stratasub1, krillgeo1)
 krill.strata<-readRDS("KrillData.Rdata") 
 ```
 
+
 ## Calculate Index Recruit
 
 ```{r}
