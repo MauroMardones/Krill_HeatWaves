@@ -2,7 +2,7 @@
 title: "Correlation analysis Krill recriutment and environmental covariables"
 subtitle: "Stock assessment krill populations supplementary methods"
 author: "Mardones, M; Rebolledo, L. ; Krugger, L."
-date:  "06 July, 2023"
+date:  "28 July, 2023"
 bibliography: heatwave.bib
 csl: apa.csl
 link-citations: yes
@@ -67,6 +67,27 @@ library(PerformanceAnalytics)
 library(psych)
 library(lme4)
 library(sjPlot)
+library(ggthemes)
+```
+
+
+
+
+```r
+My_theme <- theme(axis.text.y = element_blank(),
+                  axis.ticks.y = element_blank(),
+                  axis.ticks.x=element_blank(),
+                  panel.background = element_blank(),
+                  panel.border = element_rect(fill = NA, 
+                                              size = 1),
+                  strip.background = element_rect(fill = "white", 
+                                                  color = "white",
+                                                  size = 1),
+                  text = element_text(size = 14),
+                  panel.grid.major = element_line(colour = "white",
+                                                  size = 0.1),
+                  panel.grid.minor = element_line(colour = "white",
+                                                  size = 0.1))
 ```
 
 # Background
@@ -89,54 +110,38 @@ The main idea is join length and covariabes into strata polygons.
 
 
 ```r
-load("datgeo5.RData")
-load("datchl.RData")
-load("dattsm.RData")
-load("~/DOCAS/Data/KrillLows/DataEnvKrill.RData")
+#load("datgeo5.RData")
+#load("datchl.RData")
+#load("dattsm.RData")
+#load("~/DOCAS/Data/KrillLows/DataEnvKrill.RData")
+BioKrill <- readRDS("BioKrill.Rdata")
 ```
+
+
+
+```r
+biokrill2 <- BioKrill %>% 
+  dplyr::select(7, 8, 9, 17, 18, 20, 29, 31, 32) %>% 
+  filter(asd_code=="481") 
+  
+dim(biokrill2)
+```
+
+```
+## [1] 1099040       9
+```
+
 
 change lat-long format to `sf`.
 
 
 ```r
 #Transformo
-#Hielo
-gsic <- st_as_sf(datgeo5, coords = c("longitud", "latitud"),  
-                  crs = "+proj=latlong +ellps=WGS84") 
-# TSM
-gtsm <- st_as_sf(dattsm , coords = c("lon", "lat"),  
-                  crs = "+proj=latlong +ellps=WGS84")
-
-gchl <- st_as_sf(datchl, coords = c("lon", "lat"),  
+krillgeo <- st_as_sf(biokrill2, coords = c("longitude_haul_start", "latitude_haul_start"),  
                   crs = "+proj=latlong +ellps=WGS84")
 ```
 
-
-
-Join
-
-
-```r
-joinenv <- list(as.data.frame(gsic),
-           as.data.frame(gtsm),
-           as.data.frame(gchl)) %>% 
-        reduce(full_join, by='geometry', 'ANO')
-
-joinenv2 <- list(as.data.frame(gsic),
-           as.data.frame(gtsm),
-           as.data.frame(gchl)) %>% 
-        reduce(full_join, by='geometry')
-```
-
-
-
-
-```r
-strata <- st_read("Strata.shp", quiet=T)
-strata=st_transform(strata, "+proj=latlong +ellps=WGS84")
-```
-
-
+uso las strata compartidas 
 
 ```r
 stratasub <- st_read("Clipped_Strata.shp", quiet=T)
@@ -145,20 +150,11 @@ stratasub <- st_transform(stratasub, "+proj=latlong +ellps=WGS84")
 
 
 
-plot simple 
-
-
 ```r
+# y testeo el mapa
 ssmap <- ggplot()+
   geom_sf(data = stratasub, aes(fill=stratasub$ID, 
                            alpha=0.3))+
-  # geom_sf(data = ssmu481aa, aes(fill=ssmu481aa$GAR_Short_Label, 
-  #                         alpha=0.3))+
-  #geom_sf(data = coast2, colour="black", fill=NA)+
-  #geom_sf(data = gridcrop1, colour="black", fill=NA)+
-  #geom_sf(data= suba1aa, fill=NA)+
-  # geom_sf(aes(fill=ssmu481aa$GAR_Short_Label,
-  #              alpha=0.3))+
   scale_fill_viridis_d(option = "F",
                        name="Strata")+
   #geom_sf_label(aes(label = strata$ID))+
@@ -173,41 +169,83 @@ ssmap
 ```
 
 <img src="index_files/figure-html/unnamed-chunk-6-1.jpeg" style="display: block; margin: auto;" />
-plot simple 
-
-
-```r
-ssmap <- ggplot()+
-  geom_sf(data = strata, aes(fill=strata$ID, 
-                           alpha=0.3))+
-  # geom_sf(data = ssmu481aa, aes(fill=ssmu481aa$GAR_Short_Label, 
-  #                         alpha=0.3))+
-  #geom_sf(data = coast2, colour="black", fill=NA)+
-  #geom_sf(data = gridcrop1, colour="black", fill=NA)+
-  #geom_sf(data= suba1aa, fill=NA)+
-  # geom_sf(aes(fill=ssmu481aa$GAR_Short_Label,
-  #              alpha=0.3))+
-  scale_fill_viridis_d(option = "F",
-                       name="Strata")+
-  #geom_sf_label(aes(label = strata$ID))+
-  # labs(fill = "SSMU")+
-  ylim(230000, 2220000)+
-  xlim(-3095349 , -1858911)+
-  # coord_sf(crs = 32610)+ #sistema de prpyecccion para campos completos
-  coord_sf(crs = 6932)+
-  scale_alpha(guide="none")+
-  theme_bw()
-ssmap
-```
-
-<img src="index_files/figure-html/unnamed-chunk-7-1.jpeg" style="display: block; margin: auto;" />
+Junto las bases con los nuevos estratas. Esto tarda un poco, dado que es dato por dato en el caso de la data de krill lenght. 
 
 
 ```r
 # comoprobar si tengo datos duplicados
-strata2 <- st_make_valid(strata)
-dataenvi <- st_make_valid(gsiv)
+stratasub1 <- st_make_valid(stratasub)
+krillgeo1 <- st_make_valid(krillgeo)
+krill.strata <- st_join(stratasub1, krillgeo1)
+#saveRDS(krill.strata, "KrillData.Rdata")
 ```
+
+
+```r
+krill.strata<-readRDS("KrillData.Rdata") 
+```
+
+## Calculate Index Recruit
+
+
+```r
+inderec <- krill.strata %>% 
+  drop_na(length_total_cm) %>% 
+  dplyr::group_by(season_ccamlr,ID) %>% 
+  dplyr::mutate(prolen = length_total_cm - 4.1) %>% 
+  dplyr::mutate(prolen2 = prolen*-1) %>% 
+  dplyr::summarize(prolen3 =mean(prolen2))
+
+
+sdlen <- sd(inderec$prolen3)
+names(inderec)
+```
+
+```
+## [1] "season_ccamlr" "ID"            "prolen3"       "geometry"
+```
+
+```r
+summary(inderec)
+```
+
+```
+##  season_ccamlr       ID               prolen3                  geometry 
+##  Min.   :2001   Length:70          Min.   :-1.32537   MULTIPOLYGON : 2  
+##  1st Qu.:2009   Class :character   1st Qu.:-0.57992   POLYGON      :68  
+##  Median :2013   Mode  :character   Median :-0.28605   epsg:NA      : 0  
+##  Mean   :2012                      Mean   :-0.29012   +proj=long...: 0  
+##  3rd Qu.:2017                      3rd Qu.: 0.01722                     
+##  Max.   :2020                      Max.   : 0.65477
+```
+
+
+
+```r
+inderec$colour <- ifelse(inderec$prolen3 < 0, "negative","positive")
+
+indexplot <- ggplot(inderec,
+                    aes(rev(season_ccamlr),prolen3))+
+  geom_bar(stat="identity",
+           position="identity",
+           aes(fill = colour))+
+  scale_fill_manual(values=c(positive="firebrick1",
+                             negative="black"),
+                    name="")+
+  scale_x_continuous(breaks = seq(from = 2000, 
+                                to = 2020, by = 5))+
+  facet_wrap(.~ID, ncol=4)+
+  theme_few()+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))+
+  labs(y="IRK",
+       x="",
+       title = "Index Recruit Krill by Strata")
+indexplot
+```
+
+<img src="index_files/figure-html/unnamed-chunk-10-1.jpeg" style="display: block; margin: auto;" />
+
+
 
 
 # Conclusion

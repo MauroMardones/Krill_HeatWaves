@@ -65,7 +65,7 @@ library(PerformanceAnalytics)
 library(psych)
 library(lme4)
 library(sjPlot)
-
+library(ggthemes)
 ```
 
 
@@ -75,12 +75,16 @@ My_theme <- theme(axis.text.y = element_blank(),
                   axis.ticks.y = element_blank(),
                   axis.ticks.x=element_blank(),
                   panel.background = element_blank(),
-                  panel.border = element_rect(fill = NA, size = 1),
+                  panel.border = element_rect(fill = NA, 
+                                              size = 1),
                   strip.background = element_rect(fill = "white", 
-                                                  color = "white", size = 1),
+                                                  color = "white",
+                                                  size = 1),
                   text = element_text(size = 14),
-                  panel.grid.major = element_line(colour = "white", size = 0.1),
-                  panel.grid.minor = element_line(colour = "white", size = 0.1))
+                  panel.grid.major = element_line(colour = "white",
+                                                  size = 0.1),
+                  panel.grid.minor = element_line(colour = "white",
+                                                  size = 0.1))
 ```
 
 # Background
@@ -101,12 +105,12 @@ The main idea is join length and covariabes into strata polygons.
 - Cargar datos Ambientales `dataenvf`
 - Cargar datos de de longitud krill `sf4`
 
-```{r eval=F}
-load("datgeo5.RData")
-load("datchl.RData")
-load("dattsm.RData")
-load("~/DOCAS/Data/KrillLows/DataEnvKrill.RData")
-BioKrill <- readRDS("~/DOCAS/Data/565_C1_KRI_2021-10-01/565_C1_KRI_2021-10-01_txt/BioKrill.Rds")
+```{r}
+#load("datgeo5.RData")
+#load("datchl.RData")
+#load("dattsm.RData")
+#load("~/DOCAS/Data/KrillLows/DataEnvKrill.RData")
+BioKrill <- readRDS("BioKrill.Rdata")
 ```
 
 
@@ -121,13 +125,13 @@ dim(biokrill2)
 
 change lat-long format to `sf`.
 
-```{r ssmu1, eval =FALSE}
+```{r ssmu1}
 #Transformo
 krillgeo <- st_as_sf(biokrill2, coords = c("longitude_haul_start", "latitude_haul_start"),  
                   crs = "+proj=latlong +ellps=WGS84")
 ```
 
-
+uso las strata compartidas 
 ```{r}
 stratasub <- st_read("Clipped_Strata.shp", quiet=T)
 stratasub <- st_transform(stratasub, "+proj=latlong +ellps=WGS84")
@@ -140,7 +144,7 @@ stratasub <- st_transform(stratasub, "+proj=latlong +ellps=WGS84")
 ssmap <- ggplot()+
   geom_sf(data = stratasub, aes(fill=stratasub$ID, 
                            alpha=0.3))+
-  scale_fill_viridis_d(option = "D",
+  scale_fill_viridis_d(option = "F",
                        name="Strata")+
   #geom_sf_label(aes(label = strata$ID))+
   # labs(fill = "SSMU")+
@@ -152,6 +156,7 @@ ssmap <- ggplot()+
   theme_bw()
 ssmap
 ```
+Junto las bases con los nuevos estratas. Esto tarda un poco, dado que es dato por dato en el caso de la data de krill lenght. 
 
 ```{r eval=FALSE}
 
@@ -159,23 +164,28 @@ ssmap
 stratasub1 <- st_make_valid(stratasub)
 krillgeo1 <- st_make_valid(krillgeo)
 krill.strata <- st_join(stratasub1, krillgeo1)
+#saveRDS(krill.strata, "KrillData.Rdata")
 ```
 
+```{r}
+krill.strata<-readRDS("KrillData.Rdata") 
+```
 
 ## Calculate Index Recruit
 
-```{r eval=FALSE}
+```{r}
 inderec <- krill.strata %>% 
   drop_na(length_total_cm) %>% 
   dplyr::group_by(season_ccamlr,ID) %>% 
-  dplyr::mutate(prolen = length_total_cm - 4.16) %>% 
+  dplyr::mutate(prolen = length_total_cm - 4.1) %>% 
   dplyr::mutate(prolen2 = prolen*-1) %>% 
   dplyr::summarize(prolen3 =mean(prolen2))
 
 
 sdlen <- sd(inderec$prolen3)
 names(inderec)
-summary(inderec)
+
+#write.table(inderec, "KrillRecruit.txt")
 ```
 
 
@@ -193,7 +203,7 @@ indexplot <- ggplot(inderec,
   scale_x_continuous(breaks = seq(from = 2000, 
                                 to = 2020, by = 5))+
   facet_wrap(.~ID, ncol=4)+
-  theme_bw()+
+  theme_few()+
   theme(axis.text.x = element_text(angle = 90, hjust = 1))+
   labs(y="IRK",
        x="",
